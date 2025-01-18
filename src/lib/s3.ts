@@ -1,4 +1,4 @@
-import { S3Client } from '@aws-sdk/client-s3';
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const s3Client = new S3Client({
@@ -11,6 +11,7 @@ const s3Client = new S3Client({
 
 export const BUCKET_NAME = 'aums-cloud';
 export const MAX_FREE_STORAGE = 5 * 1024 * 1024 * 1024; // 5GB in bytes
+export { DeleteObjectCommand };
 export const formatStorageUsed = (bytes: number) => {
   if (bytes < 1024 * 1024 * 1024) {
     const mb = bytes / (1024 * 1024);

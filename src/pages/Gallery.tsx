@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Settings, LogOut } from 'lucide-react';
+import { Upload, Settings, LogOut, ChevronLeft, ChevronRight, Download, X, Trash2 } from 'lucide-react';
 import Masonry from 'react-masonry-css';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { s3Client, BUCKET_NAME, formatStorageUsed } from '../lib/s3';
+import { s3Client, BUCKET_NAME, formatStorageUsed,DeleteObjectCommand } from '../lib/s3';
 
 interface Photo {
   id: string;
@@ -23,8 +23,225 @@ interface StorageInfo {
   is_premium: boolean;
 }
 
+interface PhotoGroup {
+  date: string;
+  photos: Photo[];
+}
+
+interface PhotoModalProps {
+  photo: Photo;
+  onClose: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
+  onDelete: (photo: Photo) => Promise<void>;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
+const PhotoModal: React.FC<PhotoModalProps> = ({
+  photo,
+  onClose,
+  onNext,
+  onPrevious,
+  onDelete,
+  hasNext,
+  hasPrevious,
+}) => {
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.stopPropagation();
+      switch (e.key) {
+        case 'ArrowLeft':
+          if (hasPrevious) onPrevious();
+          break;
+        case 'ArrowRight':
+          if (hasNext) onNext();
+          break;
+        case 'Escape':
+          onClose();
+          break;
+      }
+      
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, onNext, onPrevious, hasNext, hasPrevious]);
+
+  const DeleteConfirmationModal: React.FC<{
+    isOpen: boolean;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }> = ({ isOpen, onConfirm, onCancel }) => {
+    if (!isOpen) return null;
+  
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
+        <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Photo</h3>
+          <p className="text-gray-600 mb-4">
+            Are you sure you want to delete this photo? This action cannot be undone.
+          </p>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
+  const handleDownload = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (!photo.signedUrl) return;
+
+      const response = await fetch(photo.signedUrl);
+      if (!response.ok) throw new Error('Download failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = photo.filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading photo:', error);
+    }
+  }, [photo]);
+
+  const handleModalClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await onDelete(photo);
+      onClose();
+    } catch (error) {
+      console.error('Error deleting photo:', error);
+      // You might want to show an error toast here
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirmation(false);
+    }
+  };
+
+  const handleImageClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center"
+      onClick={handleModalClick}
+    >
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        className="absolute top-4 right-4 text-white hover:text-gray-300 p-2 z-50"
+        aria-label="Close modal"
+      >
+        <X className="h-6 w-6" />
+      </button>
+      
+      <button
+        onClick={handleDownload}
+        className="absolute top-4 right-16 text-white hover:text-gray-300 p-2 z-50"
+        aria-label="Download photo"
+      >
+        <Download className="h-6 w-6" />
+      </button>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowDeleteConfirmation(true);
+        }}
+        disabled={isDeleting}
+        className="absolute top-4 right-28 text-white hover:text-gray-300 p-2 z-50"
+        aria-label="Delete photo"
+      >
+        <Trash2 className="h-6 w-6" />
+      </button>
+
+      <DeleteConfirmationModal
+        isOpen={showDeleteConfirmation}
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteConfirmation(false)}
+      />
+
+      <div className="relative w-full h-full flex items-center justify-center">
+        {hasPrevious && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrevious();
+            }}
+            className="absolute left-4 text-white hover:text-gray-300 p-4 z-50"
+            aria-label="Previous photo"
+          >
+            <ChevronLeft className="h-8 w-8" />
+          </button>
+        )}
+
+        <img
+          src={photo.signedUrl}
+          alt={photo.filename}
+          className="max-h-[90vh] max-w-[90vw] object-contain"
+          onClick={handleImageClick}
+        />
+
+        {hasNext && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNext();
+            }}
+            className="absolute right-4 text-white hover:text-gray-300 p-4 z-50"
+            aria-label="Next photo"
+          >
+            <ChevronRight className="h-8 w-8" />
+          </button>
+        )}
+      </div>
+
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-center">
+        <p className="text-sm">{photo.filename}</p>
+        <p className="text-xs text-gray-300">
+          {format(new Date(photo.created_at), 'MMMM d, yyyy')}
+        </p>
+      </div>
+    </div>
+  );
+};
+
 export default function Gallery() {
   const [photos, setPhotos] = useState<Photo[]>([]);
+  const [photoGroups, setPhotoGroups] = useState<PhotoGroup[]>([]);
+  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const { user, signOut } = useAuthStore();
@@ -41,6 +258,23 @@ export default function Gallery() {
     fetchPhotos();
     fetchStorageInfo();
   }, []);
+
+  useEffect(() => {
+    const groups = photos.reduce((acc: PhotoGroup[], photo) => {
+      const date = format(parseISO(photo.created_at), 'MMMM d, yyyy');
+      const existingGroup = acc.find(group => group.date === date);
+      
+      if (existingGroup) {
+        existingGroup.photos.push(photo);
+      } else {
+        acc.push({ date, photos: [photo] });
+      }
+      
+      return acc;
+    }, []);
+
+    setPhotoGroups(groups);
+  }, [photos]);
 
   const fetchStorageInfo = async () => {
     try {
@@ -67,7 +301,6 @@ export default function Gallery() {
 
       if (error) throw error;
 
-      // Get signed URLs for each photo
       const photosWithUrls = await Promise.all(
         photosData.map(async (photo) => {
           const command = new GetObjectCommand({
@@ -84,6 +317,61 @@ export default function Gallery() {
       console.error('Error fetching photos:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deletePhoto = async (photo: Photo) => {
+    try {
+      // Delete from S3
+      const deleteCommand = new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: photo.s3_key,
+      });
+      await s3Client.send(deleteCommand);  // Ensure this resolves successfully
+  
+      // Delete from Supabase
+      const { error } = await supabase
+        .from('photos')
+        .delete()
+        .eq('id', photo.id);
+  
+      if (error) throw error;  // Ensure you handle any error from Supabase
+  
+      // Update storage info
+      await fetchStorageInfo();  // To keep the storage info updated
+  
+      // Update local state
+      setPhotos(prevPhotos => prevPhotos.filter(p => p.id !== photo.id));
+  
+    } catch (error) {
+      console.error('Error deleting photo:', error);
+      throw error; // Re-throw the error so it can be caught in the modal component
+    }
+  };
+  
+
+
+  const handlePhotoClick = (photo: Photo) => {
+    setSelectedPhoto(photo);
+  };
+
+  const handleModalClose = () => {
+    setSelectedPhoto(null);
+  };
+
+  const handleNext = () => {
+    if (!selectedPhoto) return;
+    const currentIndex = photos.findIndex(p => p.id === selectedPhoto.id);
+    if (currentIndex < photos.length - 1) {
+      setSelectedPhoto(photos[currentIndex + 1]);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (!selectedPhoto) return;
+    const currentIndex = photos.findIndex(p => p.id === selectedPhoto.id);
+    if (currentIndex > 0) {
+      setSelectedPhoto(photos[currentIndex - 1]);
     }
   };
 
@@ -155,35 +443,56 @@ export default function Gallery() {
             </div>
           </div>
         ) : (
-          <Masonry
-            breakpointCols={breakpointColumns}
-            className="flex -ml-4 w-auto"
-            columnClassName="pl-4 bg-clip-padding"
-          >
-            {photos.map((photo) => (
-              <div
-                key={photo.id}
-                className="mb-4 break-inside-avoid"
-              >
-                <div className="group relative bg-white rounded-lg shadow-sm overflow-hidden">
-                  <img
-                    src={photo.signedUrl}
-                    alt={photo.filename}
-                    className="w-full h-auto object-cover"
-                    loading="lazy"
-                  />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <p className="text-white text-sm truncate">{photo.filename}</p>
-                    <p className="text-white/80 text-xs">
-                      {format(new Date(photo.created_at), 'MMM d, yyyy')}
-                    </p>
-                  </div>
-                </div>
+          <div className="space-y-8">
+            {photoGroups.map((group) => (
+              <div key={group.date} className="space-y-4">
+                <h2 className="text-lg font-semibold text-gray-900">{group.date}</h2>
+                <Masonry
+                  breakpointCols={breakpointColumns}
+                  className="flex -ml-4 w-auto"
+                  columnClassName="pl-4 bg-clip-padding"
+                >
+                  {group.photos.map((photo) => (
+                    <div
+                      key={photo.id}
+                      className="mb-4 break-inside-avoid cursor-pointer"
+                      onClick={() => handlePhotoClick(photo)}
+                    >
+                      <div className="group relative bg-white rounded-lg shadow-sm overflow-hidden">
+                        <img
+                          src={photo.signedUrl}
+                          alt={photo.filename}
+                          className="w-full h-auto object-cover"
+                          loading="lazy"
+                        />
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <p className="text-white text-sm truncate">{photo.filename}</p>
+                          <p className="text-white/80 text-xs">
+                            {format(new Date(photo.created_at), 'h:mm a')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </Masonry>
               </div>
             ))}
-          </Masonry>
+          </div>
         )}
       </main>
+
+      {/* Modal */}
+      {selectedPhoto && (
+        <PhotoModal
+          photo={selectedPhoto}
+          onClose={handleModalClose}
+          onNext={handleNext}
+          onPrevious={handlePrevious}
+          onDelete={deletePhoto}
+          hasNext={photos.findIndex(p => p.id === selectedPhoto.id) < photos.length - 1}
+          hasPrevious={photos.findIndex(p => p.id === selectedPhoto.id) > 0}
+        />
+      )}
     </div>
   );
 }

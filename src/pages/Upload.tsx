@@ -11,6 +11,8 @@ interface UploadingFile {
   file: File;
   progress: number;
   error?: string;
+  cached?: boolean;
+
 }
 
 export default function Upload() {
@@ -55,7 +57,9 @@ export default function Upload() {
           Bucket: BUCKET_NAME,
           Key: key,
           Body: await file.arrayBuffer(), // Convert file to ArrayBuffer for proper upload
-          ContentType: file.type
+          ContentType: file.type,
+          CacheControl: 'public, max-age=31536000, immutable', // Cache for 1 year
+          Expires: new Date(Date.now() + 31536000000) // Cache for 1 year
         });
 
         await s3Client.send(command);
