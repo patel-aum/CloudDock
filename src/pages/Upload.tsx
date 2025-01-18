@@ -1,0 +1,181 @@
+import React, { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useDropzone } from 'react-dropzone';
+import { Upload as UploadIcon, X, ArrowLeft } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../store/authStore';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client, BUCKET_NAME, MAX_FREE_STORAGE } from '../lib/s3';
+
+interface UploadingFile {
+  file: File;
+  progress: number;
+  error?: string;
+}
+
+export default function Upload() {
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    // First, check storage limit
+    const { data: storageData } = await supabase
+      .from('user_storage')
+      .select('storage_used, is_premium')
+      .eq('user_id', user?.id)
+      .single();
+
+    if (!storageData.is_premium && storageData.storage_used + acceptedFiles.reduce((acc, file) => acc + file.size, 0) > MAX_FREE_STORAGE) {
+      alert('Storage limit exceeded. Please upgrade to premium to upload more files.');
+      return;
+    }
+
+    const newFiles = acceptedFiles.map(file => ({
+      file,
+      progress: 0
+    }));
+
+    setUploadingFiles(prev => [...prev, ...newFiles]);
+
+    for (const fileData of newFiles) {
+      try {
+        const file = fileData.file;
+        const key = `${user?.id}/${Date.now()}-${file.name}`;
+
+        // Upload to S3
+        const command = new PutObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: key,
+          Body: file,
+          ContentType: file.type
+        });
+
+        await s3Client.send(command);
+
+        // Update database
+        const { error: dbError } = await supabase
+          .from('photos')
+          .insert({
+            user_id: user?.id,
+            s3_key: key,
+            filename: file.name,
+            size: file.size,
+            mime_type: file.type,
+            metadata: {}
+          });
+
+        if (dbError) throw dbError;
+
+        // Update storage usage
+        const { error: storageError } = await supabase
+          .rpc('increment_storage_used', {
+            user_id: user?.id,
+            size_increment: file.size
+          });
+
+        if (storageError) throw storageError;
+
+        setUploadingFiles(prev =>
+          prev.map(f =>
+            f.file === file ? { ...f, progress: 100 } : f
+          )
+        );
+      } catch (error) {
+        console.error('Upload error:', error);
+        setUploadingFiles(prev =>
+          prev.map(f =>
+            f.file === fileData.file ? { ...f, error: 'Upload failed' } : f
+          )
+        );
+      }
+    }
+  }, [user]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif']
+    }
+  });
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8 flex items-center">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center text-gray-600 hover:text-gray-900"
+          >
+            <ArrowLeft className="h-5 w-5 mr-2" />
+            Back to Gallery
+          </button>
+        </div>
+
+        <div
+          {...getRootProps()}
+          className={`
+            border-2 border-dashed rounded-lg p-12 text-center
+            ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white'}
+            transition-colors duration-150 ease-in-out cursor-pointer
+          `}
+        >
+          <input {...getInputProps()} />
+          <UploadIcon className="mx-auto h-12 w-12 text-gray-400" />
+          <p className="mt-2 text-sm font-medium text-gray-900">
+            Drag & drop photos here
+          </p>
+          <p className="mt-1 text-sm text-gray-500">
+            or click to select files
+          </p>
+        </div>
+
+        {uploadingFiles.length > 0 && (
+          <div className="mt-8 bg-white shadow sm:rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg font-medium leading-6 text-gray-900">
+                Uploads
+              </h3>
+              <div className="mt-4 space-y-4">
+                {uploadingFiles.map((fileData, index) => (
+                  <div key={index} className="flex items-center">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {fileData.file.name}
+                        </p>
+                        {fileData.error ? (
+                          <span className="text-red-500 text-sm">
+                            {fileData.error}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-500">
+                            {fileData.progress}%
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${
+                            fileData.error ? 'bg-red-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${fileData.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setUploadingFiles(prev => prev.filter(f => f !== fileData))}
+                      className="ml-4 text-gray-400 hover:text-gray-500"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
