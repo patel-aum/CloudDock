@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
-import { MAX_FREE_STORAGE } from '../lib/s3';
+import { MAX_FREE_STORAGE, formatStorageUsed } from '../lib/s3';
 
 interface StorageInfo {
   storage_used: number;
@@ -33,11 +33,7 @@ export default function Settings() {
       console.error('Error fetching storage info:', error);
     }
   };
-
-  const formatStorageUsed = (bytes: number) => {
-    const gb = bytes / (1024 * 1024 * 1024);
-    return `${gb.toFixed(2)} GB`;
-  };
+  
 
   const handleUpgradeClick = () => {
     // TODO: Implement payment integration

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+  import React, { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { Upload as UploadIcon, X, ArrowLeft } from 'lucide-react';
@@ -11,15 +11,49 @@ interface UploadingFile {
   file: File;
   progress: number;
   error?: string;
+  cached?: boolean;
 }
+
+interface CachedFile {
+  key: string;
+  url: string;
+  expiryTime: number;
+}
+
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
 export default function Upload() {
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const cachedFiles = JSON.parse(localStorage.getItem('uploadedFiles') || '[]');
+    const now = Date.now();
+    const validCachedFiles = cachedFiles.filter((file: CachedFile) => file.expiryTime > now);
+    localStorage.setItem('uploadedFiles', JSON.stringify(validCachedFiles));
+  }, []);
+
+  const cacheFile = useCallback((key: string, url: string) => {
+    const cachedFiles = JSON.parse(localStorage.getItem('uploadedFiles') || '[]');
+    const expiryTime = Date.now() + CACHE_DURATION;
+    
+    cachedFiles.push({ key, url, expiryTime });
+    localStorage.setItem('uploadedFiles', JSON.stringify(cachedFiles));
+  }, []);
+
+  const getCachedFile = useCallback((key: string): string | null => {
+    const cachedFiles = JSON.parse(localStorage.getItem('uploadedFiles') || '[]');
+    const cachedFile = cachedFiles.find((file: CachedFile) => file.key === key);
+    
+    if (cachedFile && cachedFile.expiryTime > Date.now()) {
+      return cachedFile.url;
+    }
+    return null;
+  }, []);
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    // First, check storage limit
+    // Check storage limit
     const { data: storageData, error: storageError } = await supabase
       .from('user_storage')
       .select('storage_used, is_premium')
@@ -49,16 +83,33 @@ export default function Upload() {
       try {
         const file = fileData.file;
         const key = `${user?.id}/${Date.now()}-${file.name}`;
+        
+        // Check if file is already cached
+        const cachedUrl = getCachedFile(key);
+        if (cachedUrl) {
+          setUploadingFiles(prev =>
+            prev.map(f =>
+              f.file === file ? { ...f, progress: 100, cached: true } : f
+            )
+          );
+          continue;
+        }
 
         // Upload to S3
         const command = new PutObjectCommand({
           Bucket: BUCKET_NAME,
           Key: key,
-          Body: await file.arrayBuffer(), // Convert file to ArrayBuffer for proper upload
-          ContentType: file.type
+          Body: await file.arrayBuffer(),
+          ContentType: file.type,
+          CacheControl: 'public, max-age=31536000, immutable',
+          Expires: new Date(Date.now() + 31536000000)
         });
 
         await s3Client.send(command);
+
+        // Cache the uploaded file
+        const fileUrl = `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`;
+        cacheFile(key, fileUrl);
 
         // Update database
         const { error: dbError } = await supabase
@@ -74,7 +125,7 @@ export default function Upload() {
 
         if (dbError) throw dbError;
 
-        // Update storage usage using RPC function
+        // Update storage usage
         const { error: storageError } = await supabase
           .rpc('increment_storage_used', {
             user_id: user?.id,
@@ -97,7 +148,7 @@ export default function Upload() {
         );
       }
     }
-  }, [user]);
+  }, [user, cacheFile, getCachedFile]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

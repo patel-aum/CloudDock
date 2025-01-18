@@ -3,6 +3,7 @@ import { Camera } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 export default function Login() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -14,7 +15,7 @@ export default function Login() {
     setError('');
     try {
       if (isSignUp) {
-        await signUp(email, password);
+        await signUp(email, password, name);
       } else {
         await signIn(email, password);
       }
@@ -53,6 +54,22 @@ export default function Login() {
           )}
 
           <form className="space-y-6" onSubmit={handleSubmit}>
+            {isSignUp && (
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  Full Name
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  required={isSignUp}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+            )}
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
@@ -120,7 +137,11 @@ export default function Login() {
             <button
               type="button"
               className="text-sm text-blue-600 hover:text-blue-500"
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setError('');
+                setName('');
+              }}
             >
               {isSignUp
                 ? 'Already have an account? Sign in'

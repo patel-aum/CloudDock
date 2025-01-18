@@ -17,7 +17,15 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading) {
-      if (user && location.pathname === '/login') {
+      // Check if this is a callback from SSO with access_token in the URL
+      const hasAuthToken = window.location.hash.includes('access_token');
+      
+      if (hasAuthToken) {
+        // If we have a token, wait briefly for auth state to update
+        setTimeout(() => {
+          navigate('/', { replace: true });
+        }, 500);
+      } else if (user && location.pathname === '/login') {
         navigate('/', { replace: true });
       } else if (!user && location.pathname !== '/login') {
         navigate('/login', { replace: true });

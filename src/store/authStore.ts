@@ -48,17 +48,32 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
     if (error) throw error;
   },
-  signUp: async (email, password) => {
+  signUp: async (email: string, password: string, name: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin,
+        data: {
+          full_name: name
+        }
       }
     });
+  
     if (error) throw error;
-    set({ user: data.user, session: data.session });
+    return data;
   },
+  // signUp: async (email, password) => {
+  //   const { data, error } = await supabase.auth.signUp({
+  //     email,
+  //     password,
+  //     options: {
+  //       emailRedirectTo: window.location.origin,
+  //     }
+  //   });
+  //   if (error) throw error;
+  //   set({ user: data.user, session: data.session });
+  // },
   signOut: async () => {
     await supabase.auth.signOut();
     set({ user: null, session: null });

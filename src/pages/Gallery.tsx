@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { s3Client, BUCKET_NAME } from '../lib/s3';
+import { s3Client, BUCKET_NAME, formatStorageUsed } from '../lib/s3';
 
 interface Photo {
   id: string;
@@ -85,11 +85,6 @@ export default function Gallery() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatStorageUsed = (bytes: number) => {
-    const gb = bytes / (1024 * 1024 * 1024);
-    return `${gb.toFixed(2)} GB`;
   };
 
   const handleLogout = async () => {

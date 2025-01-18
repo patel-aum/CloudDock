@@ -11,5 +11,14 @@ const s3Client = new S3Client({
 
 export const BUCKET_NAME = 'aums-cloud';
 export const MAX_FREE_STORAGE = 5 * 1024 * 1024 * 1024; // 5GB in bytes
+export const formatStorageUsed = (bytes: number) => {
+  if (bytes < 1024 * 1024 * 1024) {
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(2)} MB`;
+  } else {
+    const gb = bytes / (1024 * 1024 * 1024);
+    return `${gb.toFixed(2)} GB`;
+  }
+};
 
 export { s3Client, getSignedUrl };
