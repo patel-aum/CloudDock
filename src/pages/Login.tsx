@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Camera } from 'lucide-react';
+// import { Camera } from 'lucide-react';
+import clouddockicon from '../icons/ClouDocklogo-transparent.png';
 import { useAuthStore } from '../store/authStore';
 
 export default function Login() {
@@ -35,18 +36,22 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col py-12 sm:px-6 lg:px-8 animate-gradient-x">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <Camera className="h-12 w-12 text-blue-500" />
+          <img
+            src={clouddockicon}
+            alt="Cloud Dock Icon"
+            className="w-60 h-60 object-contain animate-bounce-slow" />
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          PhotosXP
+        <h2 className="mt-2 text-center text-3xl font-extrabold text-gray-900 animate-fade-in">
+          Welcome to CloudDock
         </h2>
+
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+      <div className="mt-2 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-4 shadow-lg sm:rounded-lg sm:px-10 transform hover:scale-105 transition-all duration-300 animate-fade-in">
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
               {error}
@@ -101,7 +106,7 @@ export default function Login() {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-sm font-medium hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transform hover:scale-105 transition-all duration-300 shadow-sm"
               >
                 {isSignUp ? 'Sign Up' : 'Sign In'}
               </button>
@@ -121,7 +126,7 @@ export default function Login() {
             <div className="mt-6">
               <button
                 onClick={handleGoogleSignIn}
-                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm hover:shadow-md bg-white text-gray-700 hover:bg-gray-50 transform hover:scale-105 transition-all duration-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <img
                   className="h-5 w-5 mr-2"
@@ -136,7 +141,7 @@ export default function Login() {
           <div className="mt-6 text-center">
             <button
               type="button"
-              className="text-sm text-blue-600 hover:text-blue-500"
+              className="text-sm text-blue-600 hover:text-blue-500 transition-colors duration-200"
               onClick={() => {
                 setIsSignUp(!isSignUp);
                 setError('');

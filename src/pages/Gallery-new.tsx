@@ -7,8 +7,9 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import clouddockicon from '../icons/ClouDocklogo-transparent.png';
 import { s3Client, BUCKET_NAME, formatStorageUsed,DeleteObjectCommand } from '../lib/s3';
+import clouddockicon from '../icons/ClouDocklogo-transparent.png';
+import '../styles/PhotoModal.css';
 
 interface Photo {
   id: string;
@@ -211,8 +212,29 @@ const PhotoModal: React.FC<PhotoModalProps> = ({
         <img
           src={photo.signedUrl}
           alt={photo.filename}
-          className="max-h-[90vh] max-w-[90vw] object-contain"
+          className={`max-h-[90vh] max-w-[90vw] object-contain photo-modal-image ${isSwiping ? 'swiping' : ''}`}
           onClick={handleImageClick}
+          onTouchStart={(e) => {
+            setSwipeStartX(e.touches[0].clientX);
+            setIsSwiping(true);
+          }}
+          onTouchMove={(e) => {
+            if (isSwiping) {
+              const currentX = e.touches[0].clientX;
+              const diff = currentX - swipeStartX;
+              if (Math.abs(diff) > 100) {
+                if (diff > 0 && hasPrevious) {
+                  onPrevious();
+                } else if (diff < 0 && hasNext) {
+                  onNext();
+                }
+                setIsSwiping(false);
+              }
+            }
+          }}
+          onTouchEnd={() => {
+            setIsSwiping(false);
+          }}
         />
 
         {hasNext && (
@@ -245,6 +267,8 @@ export default function Gallery() {
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const [swipeStartX, setSwipeStartX] = useState(0);
   const { user, signOut } = useAuthStore();
   const navigate = useNavigate();
 
@@ -394,10 +418,10 @@ export default function Gallery() {
       {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-left justify-between">
-          <div className="flex items-left justify-left">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center space-x-4">
               <img src={clouddockicon} alt="Cloud Dock Logo" className="h-8 w-8"/>
-            <h1 className="text-2xl font-bold text-gray-900">CloudDock</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Cloud Dock</h1>
             </div>
             <div className="flex items-center space-x-4">
               {storageInfo && (
@@ -430,7 +454,7 @@ export default function Gallery() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex justify-center">
         {photos.length === 0 ? (
           <div className="text-center py-12">
             <Upload className="mx-auto h-12 w-12 text-gray-400" />
@@ -447,7 +471,7 @@ export default function Gallery() {
             </div>
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="w-full space-y-8">
             {photoGroups.map((group) => (
               <div key={group.date} className="space-y-4">
                 <h2 className="text-lg font-semibold text-gray-900">{group.date}</h2>
@@ -466,7 +490,7 @@ export default function Gallery() {
                         <img
                           src={photo.signedUrl}
                           alt={photo.filename}
-                          className="w-full h-auto object-cover"
+                          className="w-full h-auto object-cover gallery-image"
                           loading="lazy"
                         />
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -37,7 +37,7 @@ export default function Settings() {
 
   const handleUpgradeClick = () => {
     // TODO: Implement payment integration
-    alert('Payment integration coming soon!');
+    alert('Send 499 to UPI " techtv49@ybl " with your email address as comment, Will update your account within 4-5 hours');
   };
 
   return (
